@@ -1,0 +1,41 @@
+{
+    "name": "meriksk/message-queue",
+    "type": "library",
+    "description": "Simple DB driven message queue library.",
+    "keywords": ["php", "mysql", "queue", "email"],
+    "homepage": "https://github.com/meriksk",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Marek Drugac",
+            "email": "marek@luceon.us",
+            "homepage": "https://github.com/meriksk",
+            "role": "Developer"
+        }
+    ],
+    "require": {
+		"php": ">=7.3",
+		"ext-mysqli": "*",
+        "swiftmailer/swiftmailer": "^6.2"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^9.0"
+    },
+	"autoload": {
+        "psr-4": {
+            "meriksk\\MessageQueue\\": "src/"
+        }
+    },
+	"autoload-dev": {
+        "psr-4": {
+			"meriksk\\MessageQueue\\Tests\\": "tests/"
+        }
+    },
+	"scripts": {
+        "test": "vendor/bin/phpunit --colors=auto",
+        "test-ci": "vendor/bin/phpunit --coverage-clover build/coverage.xml"
+    },
+	"suggest": {
+		"ext-curl": "Needed to support File handler."
+	}
+}

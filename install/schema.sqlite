@@ -1,0 +1,14 @@
+CREATE TABLE "tbl_messages_queue" (
+	"messageId_n" INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+	"dateAdded_d" INTEGER NOT NULL,
+	"processing_n" tinyint(1) DEFAULT '0',
+	"type_c" varchar(32) NOT NULL,
+	"destination_c" mediumtext,
+	"body_c" mediumtext,
+	"subject_c" varchar(255) DEFAULT NULL,
+	"attachments_c" text,
+	"attempts_n" smallint(5) DEFAULT '0',
+	"lastAttemptDate_d" INTEGER DEFAULT NULL,
+	"lastError_c" text,
+	"failed_c" mediumtext
+)
