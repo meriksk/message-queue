@@ -43,11 +43,30 @@ class Message
 
 	/**
 	 * Class constructor
-	 * @param string $type
+	 * @param string $type Message type
+	 * @param string|array $destination
+	 * @param string $subject
+	 * @param string $body
+	 * @return Message
 	 */
-	public function __construct($type)
+	public function __construct($type, $destination=NULL, $subject=NULL, $body=NULL)
 	{
 		$this->setType($type);
+
+		// destination
+		if ($destination) {
+			$this->addDestination($destination);
+		}
+
+		// subject
+		if (is_string($subject)) {
+			$this->setSubject($subject);
+		}
+
+		// body
+		if (is_string($body)) {
+			$this->setBody($body);
+		}
 	}
 
 	/**
@@ -164,7 +183,6 @@ class Message
 
 		} catch (Exception $e) {
 			$this->_lastError = $e->getMessage();
-			var_dump($this->_lastError);die();
 		}
 
 		// post processing
@@ -220,6 +238,48 @@ class Message
 		return $message;
 	}
 
+	/**
+	 * Get message(s) from queue (database)
+	 * @param int|array $ids
+	 * @return Message|Message[]
+	 */
+	public static function get($ids)
+	{
+		$msgIds = [];
+
+		// find one message
+		if (is_numeric($ids)) {
+			$msgIds[] = $ids;
+		// find multiple messages
+		} elseif (is_array($ids)) {
+			foreach ($ids as $m) {
+				if ($m && is_numeric($m)) {
+					$msgIds[] = (int)$m;
+				}
+			}
+		}
+
+		
+		$sql = 'SELECT * FROM '. Queue::tableName() .' WHERE messageId_n IN ('. implode(',', $msgIds) .')';
+		$stm = Queue::getDb()->query($sql);
+		if ($stm) {
+			$data = [];
+			$result = $stm->fetchAll(PDO::FETCH_ASSOC);
+			foreach ($result as $row) {
+				$data[] = self::instantiate($row);
+			}
+
+			if (is_numeric($ids)) {
+				return !empty($data) ? $data[0] : null;
+			} else {
+				return $data;
+			}
+
+		} else {
+			return [];
+		}
+	
+	}
 
 	// -------------------------------------------------------------------------
 	// HELPER FUNCTIONS
@@ -531,7 +591,10 @@ class Message
 			$stmt = Queue::getDb()->prepare($sql);
 			$stmt->execute([':id' => $this->_id]);
 			$count = $stmt->rowCount();
-			return $count!==false;
+			if ($count!==false) {
+				$this->deleteAttachmentFiles();
+				return true;
+			}
 		}
 
 		return false;
@@ -749,26 +812,24 @@ class Message
      */
 	public function addAttachment($path, $name = NULL, $type = NULL)
 	{
-		try {
-			// multiple attachments
-			if (is_array($path)) {
-				foreach ($path as $file) {
-					if (is_array($file)) {
-						if (isset($file[0])) {
-							$path = isset($att[0]) ? $att[0] : null;
-							$name = isset($att[1]) ? $att[1] : null;
-							$type = isset($att[2]) ? $att[2] : null;
-							$this->attachFromPath($path, $name, $type);
-						}
-					} elseif (is_string($file)) {
-						$this->attachFromPath($file);
+		// multiple attachments
+		if (is_array($path)) {
+			foreach ($path as $file) {
+				if (is_array($file)) {
+					if (isset($file[0])) {
+						$path = isset($att[0]) ? $att[0] : null;
+						$name = isset($att[1]) ? $att[1] : null;
+						$type = isset($att[2]) ? $att[2] : null;
+						$this->attachFromPath($path, $name, $type);
 					}
+				} elseif (is_string($file)) {
+					$this->attachFromPath($file);
 				}
-			// single file
-			} else {
-				$this->attachFromPath($path, $name, $type);
 			}
-		} catch (Exception $e) {}
+		// single file
+		} else {
+			$this->attachFromPath($path, $name, $type);
+		}
 
 		return $this;
 	}
@@ -799,7 +860,6 @@ class Message
 
 		// check temporary directory
 		if (self::$_checkTempDir===NULL) {
-
 			self::$_checkTempDir = true;
 
 			// temporary directory - test

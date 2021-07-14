@@ -11,6 +11,7 @@ use meriksk\MessageQueue\handlers\BaseHandler;
 
 /**
  * EmailHandler class file.
+ * @see https://symfony.com/doc/current/reference/configuration/swiftmailer.html
  */
 class EmailHandler extends BaseHandler
 {

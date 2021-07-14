@@ -6,7 +6,7 @@ CREATE TABLE `tbl_messages_queue` (
   `destination_c` mediumtext,
   `body_c` mediumtext,
   `subject_c` varchar(255) DEFAULT NULL,
-  `attachments_c` text,
+  `attachments_c` mediumtext,
   `attempts_n` smallint(5) unsigned DEFAULT '0',
   `lastAttemptDate_d` int(10) unsigned DEFAULT NULL,
   `lastError_c` text,

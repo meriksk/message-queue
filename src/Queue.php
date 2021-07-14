@@ -14,7 +14,21 @@ use meriksk\MessageQueue\handlers\BaseHandler;
  * <code>
  * <pre>
  *
- * // Example 1: Basic
+ * // Example 1: 
+ * 
+ * use meriksk\MessageQueue\Queue;
+ * $queue = new Queue();
+ * $message = new Message(Queue::EMAIL, 'recipient1@email.com', 'Subject', 'message body');
+ * $queue->add($message);
+ * 
+ * // Example2:
+ * 
+ * use meriksk\MessageQueue\Queue;
+ * $queue = new Queue();
+ * $message = new Message(Queue::EMAIL, 'recipient1@email.com', 'Subject', 'message body');
+ * $message->save();
+ * 
+ * // Example 3:
  *
  * use meriksk\MessageQueue\Queue;
  * $message = Queue::message(Queue::EMAIL);
@@ -28,8 +42,8 @@ use meriksk\MessageQueue\handlers\BaseHandler;
  * 
  * // save
  * $message->save();
- *
- * // Example 2: Cron job
+ * 
+ * // Example 4: Cron job
  * Queue::antiflood(1, 3)
  * Queue::cron();
  *
@@ -281,25 +295,7 @@ class Queue
 	 */
 	public static function message($type, $destination=NULL, $subject=NULL, $body=NULL)
 	{
-		// new message
-		$message = new Message($type);
-
-		// destination
-		if ($destination) {
-			$message->addDestination($destination);
-		}
-
-		// subject
-		if (is_string($subject)) {
-			$message->setSubject($subject);
-		}
-
-		// body
-		if (is_string($body)) {
-			$message->setBody($body);
-		}
-
-		return $message;
+		return new Message($type, $destination, $subject, $body);
 	}
 
 	/**
@@ -333,38 +329,7 @@ class Queue
 	 */
 	public static function get($ids)
 	{
-		$msgIds = [];
-
-		// find one message
-		if (is_numeric($ids)) {
-			$msgIds[] = $ids;
-		// find multiple messages
-		} elseif (is_array($ids)) {
-			foreach ($ids as $m) {
-				if ($m && is_numeric($m)) {
-					$msgIds[] = (int)$m;
-				}
-			}
-		}
-
-		$sql = 'SELECT * FROM '. Queue::tableName() .' WHERE messageId_n IN ('. implode(',', $msgIds) .')';
-		$stm = self::getDb()->query($sql);
-		if ($stm) {
-			$data = [];
-			$result = $stm->fetchAll(PDO::FETCH_ASSOC);
-			foreach ($result as $row) {
-				$data[] = Message::instantiate($row);
-			}
-
-			if (is_numeric($ids)) {
-				return !empty($data) ? $data[0] : null;
-			} else {
-				return $data;
-			}
-
-		} else {
-			return [];
-		}
+		return Message::get($ids);
 	}
 
 	/**
@@ -405,14 +370,14 @@ class Queue
 	 * @param int $days Deletes messages older than N-days
 	 * @return int returns the number of messages that were deleted
 	 */
-	public static function clear($days = NULL)
+	public static function purge($days = NULL)
 	{
 		$condition = '';
 		$filterDays = is_numeric($days) && $days > 0;
 
 		$pdoParams = [];
 		$tableName = self::tableName();
-
+		
 		if ($filterDays) {
 			$days = (int)$days;
 			if ($days > 0) {
@@ -426,15 +391,40 @@ class Queue
 		}
 
 		// delete data
-		$sql = 'DELETE FROM '. $tableName . $condition;
+		$sql = 'SELECT * FROM '. $tableName . $condition . ' LIMIT 100';
 		$stmt = self::getDb()->prepare($sql);
-		$deleted = $stmt->execute($pdoParams);
+		$deleted = 0;
+
+		if ($stmt) {
+			$rows = [];
+	
+			do {
+				$stmt->execute();
+				$rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+				foreach ($rows as $row) {
+					$message = Message::instantiate($row);
+					if ($message && $message->delete()) {
+						$deleted++;
+					}
+				}
+			} while (!empty($rows));
+		}		
 
 		// reset auto increment value
-		if ($filterDays === false && $deleted !== false) {
-			$sql = 'DELETE FROM sqlite_sequence WHERE name = :tableName';
-			$stmt = self::getDb()->prepare($sql);
-			$stmt->execute([':tableName' => $tableName]);
+		if ($filterDays === false && $deleted>0) {
+			
+			$sqlite = self::getDb()->getAttribute(PDO::ATTR_DRIVER_NAME)==='sqlite';
+			
+			if ($sqlite) {
+				$sql = 'DELETE FROM sqlite_sequence WHERE name = :tableName';
+				$stmt = self::getDb()->prepare($sql);
+				$stmt->execute([':tableName' => $tableName]);
+			} else {
+				$sql = 'ALTER TABLE '. $tableName .' AUTO_INCREMENT = 1';
+				$stmt = self::getDb()->prepare($sql);
+				$stmt->execute();
+			}
 		}
 	}
 
@@ -473,12 +463,55 @@ class Queue
 		$ids = array_filter($ids);
 
 		if ($ids) {
-			$sql = 'DELETE FROM '. Queue::tableName() .' WHERE messageId_n IN ('. implode(',', $ids) .')';
-			$count = self::getDb()->exec($sql);
-			return $count!==false;
+			$messages = self::get($ids);
+			$deleted = 0;
+
+			foreach ($messages as $message) {
+				/* @var $message \meriksk\MessageQueue\Message */
+				if ($message->delete()) {
+					$deleted++;
+				}
+			}
+			
+			return $deleted>0;
 		} else {
 			return false;
 		}
+	}
+	
+	/**
+	 * Init message handler
+	 * @param string $type
+	 * @return BaseHandler
+	 * @throws \Exception
+	 */
+	public static function getHandler($type)
+	{
+		if (!isset(self::$handlers[$type])) {
+
+			$className = ucfirst($type).'Handler';
+			$classNamespace = __NAMESPACE__ . '\\handlers\\' . $className;
+
+			// check if class exists
+			if (!class_exists($classNamespace)) {
+				throw new \Exception('Handler class "'. $className .'" does not exists.', 500);
+			}
+
+			// init handler
+			$cfg = isset(self::$config['handlers'][$type]) ? self::$config['handlers'][$type] : [];
+			$handler = new $classNamespace();
+
+			if (!($handler instanceof handlers\BaseHandler)) {
+				throw new \Exception('"'. $className .'" must be an instance of BaseHandler.', 500);
+			}
+
+			$handler->setConfig($cfg);
+			$handler->init();
+
+			self::$handlers[$type] = $handler;
+		}
+
+		return self::$handlers[$type];
 	}
 
 	/**
@@ -552,19 +585,20 @@ class Queue
 	}
 
 	/**
-	 * Process queue
+	 * Delivers pending emails in the queue. (Cron-Job)
 	 */
-	public static function cron()
+	public static function deliver()
 	{
 		// command line arguments
 		$args = self::parseArguments();
 
 		// arguments
 		$id = isset($args['id']) ? (int)$args['id'] : 0;
+		$timestamp = array_key_exists('timestamp', $args) ? (int)$args['timestamp'] : null;
 		$forceRun = array_key_exists('force', $args);
 		$help = array_key_exists('help', $args);
-		$maxAttempts = array_key_exists('max_attemps', $args) ? (int)$args['max_attemps'] : NULL;
-		if ($maxAttempts <= 0) { $maxAttempts = NULL; }
+		$maxAttempts = array_key_exists('max_attemps', $args) ? (int)$args['max_attemps'] : null;
+		if ($maxAttempts <= 0) { $maxAttempts = null; }
 
 		// run
 		self::console("\n");
@@ -575,7 +609,8 @@ class Queue
 		if ($help===true) {
 			self::console("Usage: command [--] [args...]");
 			self::console("\n");
-			self::console("\n  --id                 Process message with specific ID (primary key)");
+			self::console("\n  --id                 Send message with the specific ID (primary key)");
+			self::console("\n  --timestamp          Deliver only messages in queue newer than specific date (timestamp)");
 			self::console("\n  --force              Force run (skip checking last attempt date");
 			self::console("\n  --help               This help");
 			self::console("\n  --max_attemps        Override maximum allowed attempts for sending a message (default: 2)");
@@ -596,6 +631,10 @@ class Queue
 			$forceRun = true;
 			$where[] = ['AND', 'messageId_n=' . $id];
 		}
+		
+		if ($timestamp > 0) {
+			$where[] = ['AND', 'dateAdded_d>=' . $timestamp];
+		}
 
 		if ($forceRun !== true) {
 			$where[] = ['AND', 'processing_n=0 AND attempts_n<'. $maxAttempts .' AND (lastAttemptDate_d IS NULL OR lastAttemptDate_d > '.(time()-600) . ')'];
@@ -615,7 +654,7 @@ class Queue
 		$sql = 'SELECT COUNT(*) FROM '. Queue::tableName() . $whereSql;
 		$messagesCount = (int)self::getDb()->query($sql)->fetchColumn();
 
-		self::console("# of messages in queue: $messagesCount\n\n");
+		self::console("# messages found: $messagesCount\n\n");
 
 		if ($messagesCount) {
 
@@ -660,41 +699,6 @@ class Queue
 			self::console("\nDONE ...\n\n");
 			return 0;
 		}
-	}
-
-	/**
-	 * Init message handler
-	 * @param string $type
-	 * @return BaseHandler
-	 * @throws \Exception
-	 */
-	public static function getHandler($type)
-	{
-		if (!isset(self::$handlers[$type])) {
-
-			$className = ucfirst($type).'Handler';
-			$classNamespace = __NAMESPACE__ . '\\handlers\\' . $className;
-
-			// check if class exists
-			if (!class_exists($classNamespace)) {
-				throw new \Exception('Handler class "'. $className .'" does not exists.', 500);
-			}
-
-			// init handler
-			$cfg = isset(self::$config['handlers'][$type]) ? self::$config['handlers'][$type] : [];
-			$handler = new $classNamespace();
-
-			if (!($handler instanceof handlers\BaseHandler)) {
-				throw new \Exception('"'. $className .'" must be an instance of BaseHandler.', 500);
-			}
-
-			$handler->setConfig($cfg);
-			$handler->init();
-
-			self::$handlers[$type] = $handler;
-		}
-
-		return self::$handlers[$type];
 	}
 
 }
