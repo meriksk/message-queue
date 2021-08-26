@@ -86,10 +86,9 @@ class Queue
 		'temp_dir' => '/tmp/message_queue',
 		'max_attemps' => 5,
 		'db' => [
-			'host' => 'localhost',
+			'dsn' => 'mysql:host=localhost;dbname=',
 			'username' => 'root',
 			'password' => '',
-			'database' => '',
 		],
 	];
 
@@ -127,12 +126,9 @@ class Queue
 				throw new Exception('Invalid configuration');
 			}
 
-			$host = isset($db['host']) ? $db['host'] : 'localhost';
-			$database = isset($db['database']) ? $db['database'] : 'message_queue';
+			$dsn = isset($db['dsn']) ? $db['dsn'] : 'mysql:host=localhost;dbname=';
 			$username =  isset($db['username']) ? $db['username'] : 'web';
 			$password =  isset($db['password']) ? $db['password'] : '';
-			
-			$dsn = 'mysql:host='. $host .';dbname='. $database;
 			self::$db = new PDO($dsn, $username, $password);
 		}
 
@@ -198,7 +194,7 @@ class Queue
 
 	/**
 	 * Get a configuration value
-	 * @param string $key attribute value or path (e.g. "db.hostname")
+	 * @param string $key attribute value or path (e.g. "db.username")
 	 * @return mixed
 	 */
 	public static function configGet($key)
@@ -240,7 +236,7 @@ class Queue
 
 	/**
 	 * Set a configuration value
-	 * @param string $key attribute value or path (e.g. "db.hostname")
+	 * @param string $key attribute value or path (e.g. "db.username")
 	 * @param mixed $value
 	 * @return bool|array Returns configuration or <b>FALSE</b> on failure.
 	 */
