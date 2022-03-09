@@ -123,7 +123,7 @@ class Message
 		} elseif (method_exists($this,'get'.$name)) {
 			throw new Exception('Property "'. get_class($this) .'.'. $name .'" is read only.');
 		}
-	}	
+	}
 
 	/**
 	 * Send the message
@@ -165,7 +165,7 @@ class Message
 				$this->_failed = $handler->failed;
 
 				if ($handler->failed) {
-					
+
 					// unset success recipients
 					$dest = $this->_destination;
 					foreach ($handler->failed as $f) {
@@ -198,7 +198,7 @@ class Message
 
 		return $num;
 	}
-	
+
 	/**
 	 * Istantiate a message
 	 * @param array $data A database result set
@@ -259,7 +259,7 @@ class Message
 			}
 		}
 
-		
+
 		$sql = 'SELECT * FROM '. Queue::tableName() .' WHERE messageId_n IN ('. implode(',', $msgIds) .')';
 		$stm = Queue::getDb()->query($sql);
 		if ($stm) {
@@ -278,7 +278,7 @@ class Message
 		} else {
 			return [];
 		}
-	
+
 	}
 
 	// -------------------------------------------------------------------------
@@ -312,7 +312,7 @@ class Message
 	{
 		return $this->_type && $this->_destination;
 	}
-	
+
 	/**
 	 * Returns the number of attempts.
 	 * @return int
@@ -501,7 +501,7 @@ class Message
 		if (!$this->isValid()) {
 			return false;
 		}
-	
+
 		$db = Queue::getDb();
 		if (!$db) { return false; }
 
@@ -520,12 +520,12 @@ class Message
 
 				// set private attributes
 				$this->_dateAdded = time();
-				
+
 				// statement data
 				$data = [
 					':dateAdded' => $this->_dateAdded,
 					':processing' => $this->_processing,
-					':type' => $this->_type,					
+					':type' => $this->_type,
 					':destination' => json_encode($this->_destination, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES),
 					':body' => $this->_body,
 					':subject' => $this->_subject,
@@ -627,20 +627,20 @@ class Message
 
 		if (!empty($arr)) {
 			foreach ($arr as $key => $val) {
-				
+
 				$emailAddress = false;
 				$recipientName = false;
-				
+
 				// key is an email address
 				// [email address => name]
 				if (is_string($key) && strpos($key, '@')!==false) {
-					
+
 					$emailAddress = trim($key);
 					$recipientName = trim($val);
-					
+
 				// key is a numeric value
 				// [0 => email address]
-				} elseif (is_numeric($key)) {					
+				} elseif (is_numeric($key)) {
 					$emailAddress = trim($val);
 				}
 
@@ -851,6 +851,7 @@ class Message
 		}
 
 		// check source file
+		$path = str_replace(['\\', '/'], DIRECTORY_SEPARATOR, $path);
 		if (!file_exists($path)) {
 			throw new Exception('Source file "'. $path .'" does not exists.', 404);
 		}

@@ -1,10 +1,13 @@
 <?php
-
 namespace meriksk\MessageQueue\handlers;
 
-use Swift_SmtpTransport;
-use Swift_Mailer;
-use Swift_Message;
+use RuntimeException;
+use Symfony\Component\Mailer\Mailer as SymfonyMailer;
+use Symfony\Component\Mailer\Exception\TransportExceptionInterface;
+use Symfony\Component\Mailer\Transport;
+use Symfony\Component\Mailer\Transport\Dsn;
+use Symfony\Component\Mime\Address;
+use Symfony\Component\Mime\Email;
 use meriksk\MessageQueue\Queue;
 use meriksk\MessageQueue\handlers\BaseHandler;
 
@@ -21,19 +24,23 @@ class EmailHandler extends BaseHandler
 	 * @var \Swift_Mailer
 	 */
 	private static $mailer;
-	
-	/** 
-	 * @var array Handler default configuration. 
+
+	/**
+	 * @var array Handler default configuration.
 	 */
 	protected $defaultConfig = [
-		'transport' => 'smtp',
+		'scheme' => 'smtp',
 		'host' => '',
 		'username' => '',
 		'password' => '',
-		'encryption' => 'ssl',
 		'port' => 465,
+		'dsn' => 'smtp://user:pass@smtp.example.com:25',
 		'from' => '',
-		'stream_options' => [],
+		'charset' => 'utf-8',
+		//'options' => [
+		//	'verify_peer' => 0,
+		//	'verify_peer_name' => 0,
+		//],
 	];
 
 
@@ -68,18 +75,44 @@ class EmailHandler extends BaseHandler
 		}
 
 		// init transport
-		$transport = new Swift_SmtpTransport($this->config['host'], $this->config['port'], $this->config['encryption']);
+		$transport = $this->createTransport($this->config);
+		self::$mailer = new SymfonyMailer($transport);
 
-		// username
-		if (!empty($this->config['username'])) {
-			$transport->setUsername($this->config['username']);
-		}
+		// antiflood plugin
+		//$antiflood = Queue::getAntifloodConfig();
+		//if ($antiflood && $antiflood[0]>0) {
+		//	self::$mailer->registerPlugin(new \Swift_Plugins_AntiFloodPlugin($antiflood[0], $antiflood[1]));
+		//}
+	}
 
-		// password
-		if (!empty($this->config['password'])) {
-			$transport->setPassword($this->config['password']);
-		}
+	private function createTransport(array $config = [])
+    {
+        //if (array_key_exists('enableMailerLogging', $config)) {
+        //    $this->enableMailerLogging = $config['enableMailerLogging'];
+        //    unset($config['enableMailerLogging']);
+        //}
 
+        $logger = null;
+        //if ($this->enableMailerLogging) {
+        //    $logger = new Logger();
+        //}
+
+        $defaultFactories = Transport::getDefaultFactories(null, null, $logger);
+        $transportObj = new Transport($defaultFactories);
+
+        if (array_key_exists('dsn', $config)) {
+            $transport = $transportObj->fromString($config['dsn']);
+        } elseif(array_key_exists('scheme', $config) && array_key_exists('host', $config)) {
+            $dsn = new Dsn(
+                $config['scheme'],
+                $config['host'],
+                $config['username'] ?? '',
+                $config['password'] ?? '',
+                $config['port'] ?? '',
+                $config['options'] ?? [],
+            );
+
+			/*
 		// stream options (ssl)
 		if (!empty($this->config['stream_options'])) {
 			$transport->setStreamOptions($this->config['stream_options']);
@@ -89,16 +122,15 @@ class EmailHandler extends BaseHandler
 		if (php_sapi_name()==='cli' || (isset($_SERVER['REMOTE_ADDR']) && !in_array($_SERVER['REMOTE_ADDR'], ['127.0.0.1', '::1']))) {
 			$transport->setLocalDomain('[127.0.0.1]');
 		}
+			 */
 
-		// init mailer
-		self::$mailer = new Swift_Mailer($transport);
+            $transport = $transportObj->fromDsnObject($dsn);
+        } else {
+            $transport = $transportObj->fromString('null://null');
+        }
 
-		// antiflood plugin
-		$antiflood = Queue::getAntifloodConfig();
-		if ($antiflood && $antiflood[0]>0) {
-			self::$mailer->registerPlugin(new \Swift_Plugins_AntiFloodPlugin($antiflood[0], $antiflood[1]));
-		}
-	}
+        return $transport;
+    }
 
 	/**
 	 * Send a message
@@ -113,15 +145,21 @@ class EmailHandler extends BaseHandler
 		$this->error = NULL;
 		$this->failed = [];
 
-		// [ 'address' => 'name', 'address' => 'name', ... ]
-		$recipients = [];
+		// from
+		if (is_string($this->config['from'])) {
+			$from = new Address($this->config['from']);
+		} elseif (is_array($this->config['from'])) {
+			$address = array_keys($this->config['from']);
+			$name = array_values($this->config['from']);
+			$from = new Address($address[0], $name[0]);
+		}
 
 		// check data
+		$recipients = [];
 		foreach ($destination as $address => $name) {
 
 			// ['addr1@foo.com', 'addr2@foo.com', ...]
 			if (is_int($address)) {
-
 				if (!empty($name) && filter_var($name, FILTER_VALIDATE_EMAIL)) {
 					$recipients[$name] = '';
 				} else {
@@ -146,58 +184,44 @@ class EmailHandler extends BaseHandler
 		}
 
 		// start transport
-		$transport = self::$mailer->getTransport();
-		if (!$transport->ping()) {
-			$transport->stop();
-			$transport->start();
-		}
+		//$transport = self::$mailer->getTransport();
+		//if (!$transport->ping()) {
+		//	$transport->stop();
+		//	$transport->start();
+		//}
 
-		$message = new Swift_Message();
-		$message->setFrom($this->config['from']);
-		$message->setBody($body, 'text/html');
-		$message->setSubject((string)$subject);
+		$email = new Email();
+		$email->from($from);
+		$email->html($body, ($config->config['charset'] ?? 'utf-8'));
+		$email->subject((string)$subject);
 
 		// attachments
 		if ($attachments && is_array($attachments)) {
 			foreach ($attachments as $file) {
-				if (!empty($file['path']) && file_exists($file['path'])) {
-
-					$attachment = \Swift_Attachment::fromPath($file['path']);
-					if ($attachment) {
-
-						if (!empty($file['contentType'])) {
-							$attachment->setContentType($file['contentType']);
-						}
-
-						if (!empty($file['filename'])) {
-							$attachment->setFilename($file['filename']);
-						}
-
-						$message->attach($attachment);
+				if (!empty($file['path']) && file_exists($file['path'])) {					
+					if (empty($file['filename'])) {
+						$file['filename'] = basename($file['path']);
 					}
+					if (empty($file['type'])) {
+						$file['type'] = mime_content_type($file['path']);						
+					}
+
+					$email->attachFromPath($file['path'], $file['filename'], $file['type']);
 				}
 			}
 		}
 
 		$numSent = 0;
-
-		try {
-
-			foreach ($recipients as $address => $name) {
-
-				if (!empty($name)) {
-					$message->setTo([$address => $name]);
-				} else {
-					$message->setTo($address);
-				}
-
-				$f = [];
-				$numSent += self::$mailer->send($message, $f);
-				$this->failed = array_merge($this->failed, $f);
+		foreach ($recipients as $address => $name) {
+			$email->to(new Address($address, $name));
+			$f = [];
+			
+			try {
+				self::$mailer->send($email);
+				$numSent++;
+			} catch (TransportExceptionInterface $exception) {
+				$this->failed[] = $address;
 			}
-
-		} catch (\Swift_SwiftException $e) {
-			$this->error = $e->getMessage();
 		}
 
 		return $numSent;

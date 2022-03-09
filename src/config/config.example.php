@@ -6,21 +6,19 @@ Queue::config([
 	'temp_dir' => '/tmp/message_queue',
 	'max_attemps' => 5,
 	'db' => [
-		'host' => 'localhost',
-		'username' => 'root',
+		'dsn' => 'mysql:host=localhost;dbname=test_db',
+		'username' => 'user',
 		'password' => '',
-		'database' => '',
 	],
 	'handlers' => [
 		'email' => [
-			'transport' => 'smtp',
+			'scheme' => 'smtp',
 			'host' => '',
 			'username' => '',
 			'password' => '',
 			'encryption' => 'ssl',
-			'port' => 465,
-			'from' => '',
-			'stream_options' => [],
+			'port' => 587,
+			'from' => ['email@address.com' => 'Sender'],	
 		],
 	],
 

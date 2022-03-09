@@ -14,20 +14,20 @@ use meriksk\MessageQueue\handlers\BaseHandler;
  * <code>
  * <pre>
  *
- * // Example 1: 
- * 
+ * // Example 1:
+ *
  * use meriksk\MessageQueue\Queue;
  * $queue = new Queue();
  * $message = new Message(Queue::EMAIL, 'recipient1@email.com', 'Subject', 'message body');
  * $queue->add($message);
- * 
+ *
  * // Example2:
- * 
+ *
  * use meriksk\MessageQueue\Queue;
  * $queue = new Queue();
  * $message = new Message(Queue::EMAIL, 'recipient1@email.com', 'Subject', 'message body');
  * $message->save();
- * 
+ *
  * // Example 3:
  *
  * use meriksk\MessageQueue\Queue;
@@ -36,13 +36,13 @@ use meriksk\MessageQueue\handlers\BaseHandler;
  * $message->subject = 'Subject';
  * $message->addDestination('recipient1@email.com');
  * $message->addDestination('recipient2@email.com');
- * 
+ *
  * // attachment
  * $message->addAttachment($filePath2, 'custom_name', 'application/pdf');
- * 
+ *
  * // save
  * $message->save();
- * 
+ *
  * // Example 4: Cron job
  * Queue::antiflood(1, 3)
  * Queue::cron();
@@ -203,7 +203,7 @@ class Queue
 		if ($key==='' || $key===null || $key===false) {
 			return false;
 		}
-		
+
 		// config
 		$cfg = self::config();
 
@@ -247,8 +247,8 @@ class Queue
 		if ($key==='' || $key===null || $key===false) {
 			return false;
 		}
-		
-		// config 
+
+		// config
 		$cfg = self::config();
 
 		// path value
@@ -373,7 +373,7 @@ class Queue
 
 		$pdoParams = [];
 		$tableName = self::tableName();
-		
+
 		if ($filterDays) {
 			$days = (int)$days;
 			if ($days > 0) {
@@ -393,7 +393,7 @@ class Queue
 
 		if ($stmt) {
 			$rows = [];
-	
+
 			do {
 				$stmt->execute();
 				$rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -405,13 +405,13 @@ class Queue
 					}
 				}
 			} while (!empty($rows));
-		}		
+		}
 
 		// reset auto increment value
 		if ($filterDays === false && $deleted>0) {
-			
+
 			$sqlite = self::getDb()->getAttribute(PDO::ATTR_DRIVER_NAME)==='sqlite';
-			
+
 			if ($sqlite) {
 				$sql = 'DELETE FROM sqlite_sequence WHERE name = :tableName';
 				$stmt = self::getDb()->prepare($sql);
@@ -468,13 +468,13 @@ class Queue
 					$deleted++;
 				}
 			}
-			
+
 			return $deleted>0;
 		} else {
 			return false;
 		}
 	}
-	
+
 	/**
 	 * Init message handler
 	 * @param string $type
@@ -521,6 +521,7 @@ class Queue
 			$tempDir = __DIR__ . '/tmp';
 		}
 
+		$tempDir = str_replace(['\\', '/'], DIRECTORY_SEPARATOR, $tempDir);
 		return $tempDir;
 	}
 
@@ -627,7 +628,7 @@ class Queue
 			$forceRun = true;
 			$where[] = ['AND', 'messageId_n=' . $id];
 		}
-		
+
 		if ($timestamp > 0) {
 			$where[] = ['AND', 'dateAdded_d>=' . $timestamp];
 		}
@@ -658,7 +659,6 @@ class Queue
 
 			// get messages
 			$sql = 'SELECT messageId_n FROM '. Queue::tableName() . $whereSql;
-
 			$result = self::$db->query($sql)->fetchAll(PDO::FETCH_ASSOC);
 
 			// process data
