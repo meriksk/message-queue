@@ -16,7 +16,7 @@
     "require": {
 		"php": ">=7.3",
 		"ext-mysqli": "*",
-        "symfony/mailer": "^6.0"
+        "symfony/mailer": "^5.4"
     },
     "require-dev": {
         "phpunit/phpunit": "^9.0"
