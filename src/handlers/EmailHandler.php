@@ -214,7 +214,7 @@ class EmailHandler extends BaseHandler
 				self::$mailer->send($email);
 				$numSent++;
 			} catch (TransportExceptionInterface $e) {
-				$this->lastError = $e->getMessage();
+				$this->error = $e->getMessage();
 				$this->failed[] = $address;				
 			}
 		}
