@@ -34,7 +34,7 @@ abstract class BaseHandler
 	/**
 	 * Init handler
 	 */
-	protected function init()
+	public function init()
 	{
 	}
 
