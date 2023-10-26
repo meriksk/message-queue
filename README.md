@@ -64,12 +64,12 @@ Be sure the shell scripts are executable.
 `$ crontab -e`
 
 Add the following lines:
-`* * * * * /var/www/htdocs/your_app/scripts/delivery`
+`* * * * * /var/www/htdocs/your_app/scripts/deliver`
 `0 6 * * * /var/www/htdocs/your_app/scripts/purge`
 
 ```php
 Queue::antiflood(1, 3)
-Queue::cron();
+Queue::deliver(['max_attemps' => 3]);
 ```
 
 ## Testing
