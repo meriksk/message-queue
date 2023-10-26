@@ -16,7 +16,7 @@
     "require": {
 		"php": ">=7.3",
 		"ext-mysqli": "*",
-        "symfony/mailer": "^5.4"
+        "symfony/mailer": "^6.3"
     },
     "require-dev": {
         "phpunit/phpunit": "^9.0"
@@ -29,6 +29,15 @@
 	"autoload-dev": {
         "psr-4": {
 			"meriksk\\MessageQueue\\Tests\\": "tests/"
+        }
+    },
+    "config": {
+        "allow-plugins": {
+            "yiisoft/yii2-composer" : true
+        },
+        "process-timeout": 1800,
+        "fxp-asset": {
+            "enabled": false
         }
     },
 	"scripts": {

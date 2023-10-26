@@ -7,11 +7,12 @@ Queue::config([
 	'max_attemps' => 5,
 	'db' => [
 		'dsn' => 'mysql:host=localhost;dbname=test_db',
-		'username' => 'user',
+		'username' => '',
 		'password' => '',
 	],
 	'handlers' => [
 		'email' => [
+			'dsn' => 'smtp://user:pass@smtp.example.com:port',
 			'scheme' => 'smtp',
 			'host' => '',
 			'username' => '',

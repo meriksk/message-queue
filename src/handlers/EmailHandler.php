@@ -2,13 +2,12 @@
 namespace meriksk\MessageQueue\handlers;
 
 use RuntimeException;
-use Symfony\Component\Mailer\Mailer as SymfonyMailer;
-use Symfony\Component\Mailer\Exception\TransportExceptionInterface;
 use Symfony\Component\Mailer\Transport;
+use Symfony\Component\Mailer\Mailer;
+use Symfony\Component\Mime\Email;
 use Symfony\Component\Mailer\Transport\Dsn;
 use Symfony\Component\Mime\Address;
-use Symfony\Component\Mime\Email;
-use meriksk\MessageQueue\Queue;
+use Symfony\Component\Mailer\Exception\TransportExceptionInterface;
 use meriksk\MessageQueue\handlers\BaseHandler;
 
 
@@ -21,26 +20,25 @@ class EmailHandler extends BaseHandler
 
 	/**
 	 * Mailer instance
-	 * @var \Swift_Mailer
+	 * @var Mailer
 	 */
 	private static $mailer;
+
+	public $transportFactory = null;
 
 	/**
 	 * @var array Handler default configuration.
 	 */
 	protected $defaultConfig = [
+		'dsn' => 'smtp://user:pass@smtp.example.com:25',
 		'scheme' => 'smtp',
 		'host' => '',
 		'username' => '',
 		'password' => '',
-		'port' => 465,
-		'dsn' => 'smtp://user:pass@smtp.example.com:25',
+		'port' => 465,		
 		'from' => '',
 		'charset' => 'utf-8',
-		//'options' => [
-		//	'verify_peer' => 0,
-		//	'verify_peer_name' => 0,
-		//],
+		'options' => [],
 	];
 
 
@@ -56,17 +54,12 @@ class EmailHandler extends BaseHandler
 	{
 
 		if (empty($this->config)) {
-			throw new \Exception('Missing handler configuration.');
-		}
-
-		// host
-		if (empty($this->config['host'])) {
-			throw new \Exception('Unknown "host" configuration.');
+			throw new RuntimeException('Missing handler configuration.');
 		}
 
 		// from:
 		if (empty($this->config['from'])) {
-			throw new \Exception('A "from" address must be specified.');
+			throw new RuntimeException('A "from" address must be specified.');
 		}
 
 		// port
@@ -76,14 +69,19 @@ class EmailHandler extends BaseHandler
 
 		// init transport
 		$transport = $this->createTransport($this->config);
-		self::$mailer = new SymfonyMailer($transport);
-
-		// antiflood plugin
-		//$antiflood = Queue::getAntifloodConfig();
-		//if ($antiflood && $antiflood[0]>0) {
-		//	self::$mailer->registerPlugin(new \Swift_Plugins_AntiFloodPlugin($antiflood[0], $antiflood[1]));
-		//}
+		self::$mailer = new Mailer($transport);
 	}
+
+    private function getTransportFactory()
+    {
+        if (isset($this->transportFactory)) {
+            return $this->transportFactory;
+        }
+
+
+        $defaultFactories = Transport::getDefaultFactories();
+        return new Transport($defaultFactories);
+    }
 
 	private function createTransport(array $config = [])
     {
@@ -92,16 +90,12 @@ class EmailHandler extends BaseHandler
         //    unset($config['enableMailerLogging']);
         //}
 
-        $logger = null;
-        //if ($this->enableMailerLogging) {
-        //    $logger = new Logger();
-        //}
-
-        $defaultFactories = Transport::getDefaultFactories(null, null, $logger);
-        $transportObj = new Transport($defaultFactories);
+		$transportFactory = $this->getTransportFactory();
 
         if (array_key_exists('dsn', $config)) {
-            $transport = $transportObj->fromString($config['dsn']);
+            $transport = $transportFactory->fromString($config['dsn']);
+        } elseif (array_key_exists('dsn', $config) && $config['dsn'] instanceof Dsn) {
+            $transport = $transportFactory->fromDsnObject($config['dsn']);
         } elseif(array_key_exists('scheme', $config) && array_key_exists('host', $config)) {
             $dsn = new Dsn(
                 $config['scheme'],
@@ -112,21 +106,21 @@ class EmailHandler extends BaseHandler
                 $config['options'] ?? [],
             );
 
+			
+			// stream options (ssl)
 			/*
-		// stream options (ssl)
-		if (!empty($this->config['stream_options'])) {
-			$transport->setStreamOptions($this->config['stream_options']);
-		}
+			if (!empty($this->config['stream_options'])) {
+				$transport->setStreamOptions($this->config['stream_options']);
+			}
+			// localhost
+			if (php_sapi_name()==='cli' || (isset($_SERVER['REMOTE_ADDR']) && !in_array($_SERVER['REMOTE_ADDR'], ['127.0.0.1', '::1']))) {
+				$transport->setLocalDomain('[127.0.0.1]');
+			}
+			*/
 
-		// localhost
-		if (php_sapi_name()==='cli' || (isset($_SERVER['REMOTE_ADDR']) && !in_array($_SERVER['REMOTE_ADDR'], ['127.0.0.1', '::1']))) {
-			$transport->setLocalDomain('[127.0.0.1]');
-		}
-			 */
-
-            $transport = $transportObj->fromDsnObject($dsn);
+			$transport = $transportFactory->fromDsnObject($dsn);
         } else {
-            $transport = $transportObj->fromString('null://null');
+            throw new RuntimeException('Transport configuration array must contain either "dsn", or "scheme" and "host" keys.');
         }
 
         return $transport;
@@ -192,7 +186,7 @@ class EmailHandler extends BaseHandler
 
 		$email = new Email();
 		$email->from($from);
-		$email->html($body, ($config->config['charset'] ?? 'utf-8'));
+		$email->html($body);
 		$email->subject((string)$subject);
 
 		// attachments
@@ -213,14 +207,15 @@ class EmailHandler extends BaseHandler
 
 		$numSent = 0;
 		foreach ($recipients as $address => $name) {
-			$email->to(new Address($address, $name));
-			$f = [];
 			
+			$email->to(new Address($address, $name));
+
 			try {
 				self::$mailer->send($email);
 				$numSent++;
-			} catch (TransportExceptionInterface $exception) {
-				$this->failed[] = $address;
+			} catch (TransportExceptionInterface $e) {
+				$this->lastError = $e->getMessage();
+				$this->failed[] = $address;				
 			}
 		}
 

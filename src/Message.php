@@ -136,7 +136,7 @@ class Message
 		$destination = $this->getDestination();
 		if (empty($destination)) {
 			$this->_lastError = 'No recipient addresses.';
-			$this->_save();
+			$this->save();
 			return 0;
 		}
 
@@ -149,10 +149,10 @@ class Message
 		$this->_failed = [];
 		$this->save();
 
-		try {
+		// message handler (init by message type)
+		$handler = Queue::getHandler($this->_type);
 
-			// message handler (init by message type)
-			$handler = Queue::getHandler($this->_type);
+		try {
 
 			// handle message
 			// ---------------------------------------------
