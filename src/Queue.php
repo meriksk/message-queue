@@ -104,6 +104,8 @@ class Queue
 	private static $config;
 	private static $handlers = [];
 
+	private static $quiet = false;
+
 	/**
 	 * Class destructor
 	 */
@@ -382,13 +384,13 @@ class Queue
 				$dt->modify("-$days days");
 
 				$condition = ' WHERE dateAdded_d < :dateAdded';
-				$params[':dateAdded'] = $dt->getTimestamp();
+				$pdoParams[':dateAdded'] = $dt->getTimestamp();
 			}
 		}
 
 		// delete data
 		$sql = 'SELECT * FROM '. $tableName . $condition . ' LIMIT 100';
-		$stmt = self::getDb()->prepare($sql);
+		$stmt = self::getDb()->prepare($sql, $pdoParams);
 		$deleted = 0;
 
 		if ($stmt) {
@@ -562,9 +564,11 @@ class Queue
 	// -------------------------------------------------------------------------
 
 
-	public static function console($text)
+	public static function console($text, $force = false)
 	{
-		echo $text;
+		if ($force === true || self::$quiet !== true) {
+			echo $text;
+		}
 	}
 
 	private static function parseArguments()
@@ -583,11 +587,10 @@ class Queue
 
 	/**
 	 * Delivers pending emails in the queue. (Cron-Job)
+	 * @param array $args 
 	 */
-	public static function deliver()
+	public static function deliver($args = [])
 	{
-		// command line arguments
-		$args = self::parseArguments();
 
 		// arguments
 		$id = isset($args['id']) ? (int)$args['id'] : 0;
@@ -595,23 +598,27 @@ class Queue
 		$forceRun = array_key_exists('force', $args);
 		$help = array_key_exists('help', $args);
 		$maxAttempts = array_key_exists('max_attemps', $args) ? (int)$args['max_attemps'] : null;
+		$quiet = array_key_exists('quiet', $args) ? ((int)$args['quiet']===1 || $args['quiet']==='true') : false;
 		if ($maxAttempts <= 0) { $maxAttempts = null; }
+	
+		// quiet mode
+		self::$quiet = $quiet;
 
 		// run
 		self::console("\n");
 		self::console("MESSAGE QUEUE AGENT");
-		self::console("\n\n");
+		self::console("\n");
 
 		// help
 		if ($help===true) {
-			self::console("Usage: command [--] [args...]");
-			self::console("\n");
-			self::console("\n  --id                 Send message with the specific ID (primary key)");
-			self::console("\n  --timestamp          Deliver only messages in queue newer than specific date (timestamp)");
-			self::console("\n  --force              Force run (skip checking last attempt date");
-			self::console("\n  --help               This help");
-			self::console("\n  --max_attemps        Override maximum allowed attempts for sending a message (default: 2)");
-			self::console("\n\n");
+			self::console("\nUsage: command [--] [args...]", true);
+			self::console("\n", true);
+			self::console("\n  --id                 Send message with the specific ID (primary key)", true);
+			self::console("\n  --timestamp          Deliver only messages in queue newer than specific date (timestamp)", true);
+			self::console("\n  --force              Force run (skip checking last attempt date", true);
+			self::console("\n  --help               This help", true);
+			self::console("\n  --max_attemps        Override maximum allowed attempts for sending a message (default: 2)", true);
+			self::console("\n", true);
 		}
 
 		if ($maxAttempts === null) {
@@ -651,7 +658,7 @@ class Queue
 		$sql = 'SELECT COUNT(*) FROM '. Queue::tableName() . $whereSql;
 		$messagesCount = (int)self::getDb()->query($sql)->fetchColumn();
 
-		self::console("# messages found: $messagesCount\n\n");
+		self::console("\n# messages found: $messagesCount\n");
 
 		if ($messagesCount) {
 
@@ -685,9 +692,10 @@ class Queue
 
 			}
 
-			self::console("\n\n");
+			self::console("\n");
 			self::console("DONE ...");
-			self::console("\n\n");
+			self::console("\n");
+			
 			return 0;
 
 		} else {

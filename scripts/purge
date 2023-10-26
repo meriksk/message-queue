@@ -1,0 +1,28 @@
+#!/usr/bin/php
+<?php
+set_time_limit(0);
+include __DIR__ . '/../vendor/autoload.php';
+
+use meriksk\MessageQueue\Queue;
+
+Queue::config([
+	'max_attemps' => 4,
+	'temp_dir' => '/tmp/msg_queue',
+	'db' => [
+		'host' => 'localhost',
+		'username' => '',
+		'password' => '',
+		'database' => '',
+	],
+]);
+
+// command line arguments
+$shortopts  = "days::";
+$longopts = ['days::'];
+$options = getopt($shortopts, $longopts);
+$days = isset($options['days']) ? (int)$options['days'] : null;
+
+// purge messages older than 30 days
+Queue::purge($days);
+
+return 0;

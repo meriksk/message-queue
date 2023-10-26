@@ -1,0 +1,38 @@
+#!/usr/bin/php
+<?php
+set_time_limit(0);
+include __DIR__ . '/../vendor/autoload.php';
+
+use meriksk\MessageQueue\Queue;
+
+Queue::config([
+	'max_attemps' => 4,
+	'temp_dir' => '/tmp/msg_queue',
+	'db' => [
+		'host' => 'localhost',
+		'username' => '',
+		'password' => '',
+		'database' => '',
+	],
+	'handlers' => [
+		'email' => [
+			'transport' => 'smtp',
+			'host' => '',
+			'username' => '',
+			'password' => '',
+			'encryption' => 'ssl',
+			'port' => 465,
+			'from' => ['email@address.com' => 'Name'],
+		],
+	],
+]);
+
+// command line arguments
+$shortopts  = "help::id::timestamp::quiet::force::max_attemps::";
+$longopts = ['help::', 'id::', 'timestamp::', 'quiet::', 'force::', 'max_attemps::'];
+$options = getopt($shortopts, $longopts);
+
+Queue::antiflood(1, 5); 
+Queue::deliver($options);
+
+return 0;
